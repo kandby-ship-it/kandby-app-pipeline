@@ -1,45 +1,46 @@
-pipeline { 
-    agent { 
-        dockerfile { 
-            dir 'agent' 
-            } 
+pipeline {
+    agent {
+        dockerfile {
+            dir 'agent'
+            args '--network mon-app-pipeline_default'
+        }
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
             }
-stages { 
-    stage('Checkout') { 
-        steps { 
-            checkout scm 
-            } 
+        }
+        stage('Analyse SCA (Dépendances)') {
+            steps {
+                sh 'npm install'
+                sh 'npm audit --audit-level=high'
             }
-stage('Analyse SCA (Dépendances)') { 
-    steps { 
-        sh 'npm install' 
-        sh 'npm audit --audit-level=high' 
-        } 
         }
-stage('Analyse SAST (SonarQube)') { 
-    environment { 
-        scannerHome = tool 'SonarScanner' 
+        stage('Analyse SAST (SonarQube)') {
+            environment {
+                scannerHome = tool 'SonarScanner'
+            }
+            steps {
+                withSonarQubeEnv('SonarQube') {
+                    sh "${scannerHome}/bin/sonar-scanner"
+                }
+            }
         }
-        steps {
-            withSonarQubeEnv('SonarQube') { 
-                sh "${scannerHome}/bin/sonar-scanner" 
-                } 
-        } 
+        stage('Vérification Quality Gate') {
+            steps {
+                timeout(time: 1, unit: 'HOURS') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
         }
-stage('Vérification Quality Gate') { 
-            steps { timeout(time: 1, unit: 'HOURS') { 
-                waitForQualityGate abortPipeline: true 
-                } 
-            } 
+        stage('Build & Scan Image Docker') {
+            steps {
+                script {
+                    def dockerImage = docker.build("kandby-app-pipeline:${env.BUILD_ID}")
+                    sh "trivy image --exit-code 1 --severity CRITICAL kandby-app-pipeline:${env.BUILD_ID}"
+                }
+            }
         }
-stage('Build & Scan Image Docker') { 
-    steps { 
-        script { 
-            def dockerImage = docker.build("kandby-app-pipeline:${env.BUILD_ID}") 
-            sh "trivy image --exit-code 1 --severity CRITICAL kandby-app-pipeline:${env.BUILD_ID}" 
-            } 
-            } 
-        } 
-    } 
+    }
 }
-
