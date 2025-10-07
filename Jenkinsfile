@@ -2,7 +2,7 @@ pipeline {
     agent {
         dockerfile {
             dir 'agent'
-            args '--network kandby-apppipeline_default'
+            args '--network bridge'
         }
     }
     stages {
